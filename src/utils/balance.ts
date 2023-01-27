@@ -35,11 +35,16 @@ export const balanceOf = async (
         : contract.balanceOf(owner);
     }
 
+    // console.log({ "item.identifierOrCriteria": item.identifierOrCriteria });
     return contract
       .ownerOf(item.identifierOrCriteria)
       .then((ownerOf) =>
         BigNumber.from(Number(ownerOf.toLowerCase() === owner.toLowerCase()))
-      );
+      )
+      .catch((e) => {
+        console.log(e.message);
+        return BigNumber.from("0");
+      });
   } else if (isErc1155Item(item.itemType)) {
     const contract = new Contract(
       item.token,

@@ -161,7 +161,7 @@ export const shouldUseBasicFulfill = (
   );
 };
 
-const offerAndConsiderationFulfillmentMapping: {
+export const offerAndConsiderationFulfillmentMapping: {
   [_key in ItemType]?: { [_key in ItemType]?: BasicOrderRouteType };
 } = {
   [ItemType.ERC20]: {
@@ -289,8 +289,10 @@ export async function fulfillBasicOrder({
     signer
   );
 
+  const args = { basicOrderParameters, payableOverrides };
   const exchangeAction = {
     type: "exchange",
+    args,
     transactionMethods: getTransactionMethods(
       seaportContract.connect(signer),
       "fulfillBasicOrder",
@@ -308,45 +310,48 @@ export async function fulfillBasicOrder({
   };
 }
 
-export async function fulfillStandardOrder({
-  order,
-  unitsToFill = 0,
-  totalSize,
-  totalFilled,
-  offerCriteria,
-  considerationCriteria,
-  tips = [],
-  extraData,
-  seaportContract,
-  offererBalancesAndApprovals,
-  fulfillerBalancesAndApprovals,
-  offererOperator,
-  fulfillerOperator,
-  timeBasedItemParams,
-  conduitKey,
-  recipientAddress,
-  signer,
-  domain,
-}: {
-  order: Order;
-  unitsToFill?: BigNumberish;
-  totalFilled: BigNumber;
-  totalSize: BigNumber;
-  offerCriteria: InputCriteria[];
-  considerationCriteria: InputCriteria[];
-  tips?: ConsiderationItem[];
-  extraData?: string;
-  seaportContract: Seaport;
-  offererBalancesAndApprovals: BalancesAndApprovals;
-  fulfillerBalancesAndApprovals: BalancesAndApprovals;
-  offererOperator: string;
-  fulfillerOperator: string;
-  conduitKey: string;
-  recipientAddress: string;
-  timeBasedItemParams: TimeBasedItemParams;
-  signer: Signer;
-  domain?: string;
-}): Promise<
+export async function fulfillStandardOrder(
+  {
+    order,
+    unitsToFill = 0,
+    totalSize,
+    totalFilled,
+    offerCriteria,
+    considerationCriteria,
+    tips = [],
+    extraData,
+    seaportContract,
+    offererBalancesAndApprovals,
+    fulfillerBalancesAndApprovals,
+    offererOperator,
+    fulfillerOperator,
+    timeBasedItemParams,
+    conduitKey,
+    recipientAddress,
+    signer,
+    domain,
+  }: {
+    order: Order;
+    unitsToFill?: BigNumberish;
+    totalFilled: BigNumber;
+    totalSize: BigNumber;
+    offerCriteria: InputCriteria[];
+    considerationCriteria: InputCriteria[];
+    tips?: ConsiderationItem[];
+    extraData?: string;
+    seaportContract: Seaport;
+    offererBalancesAndApprovals: BalancesAndApprovals;
+    fulfillerBalancesAndApprovals: BalancesAndApprovals;
+    offererOperator: string;
+    fulfillerOperator: string;
+    conduitKey: string;
+    recipientAddress: string;
+    timeBasedItemParams: TimeBasedItemParams;
+    signer: Signer;
+    domain?: string;
+  },
+  forceAdvanced: boolean
+): Promise<
   OrderUseCase<
     ExchangeAction<
       ContractMethodReturnType<
@@ -426,7 +431,8 @@ export async function fulfillStandardOrder({
 
   const isGift = recipientAddress !== ethers.constants.AddressZero;
 
-  const useAdvanced = Boolean(unitsToFill) || hasCriteriaItems || isGift;
+  const useAdvanced =
+    forceAdvanced || Boolean(unitsToFill) || hasCriteriaItems || isGift;
 
   const orderAccountingForTips: OrderStruct = {
     ...order,
@@ -442,38 +448,61 @@ export async function fulfillStandardOrder({
     unitsToFill
   );
 
+  const criteria = hasCriteriaItems
+    ? generateCriteriaResolvers({
+        orders: [order],
+        offerCriterias: [offerCriteria],
+        considerationCriterias: [considerationCriteria],
+      })
+    : [];
+
+  const args = {
+    orderAccountingForTips,
+    conduitKey,
+    criteria,
+    payableOverrides,
+  };
+  console.log([
+    {
+      ...orderAccountingForTips,
+      numerator,
+      denominator,
+      extraData: extraData ?? "0x",
+    },
+    criteria,
+    conduitKey,
+    recipientAddress,
+    payableOverrides,
+  ]);
+  const transactionMethods = useAdvanced
+    ? getTransactionMethods(
+        seaportContract.connect(signer),
+        "fulfillAdvancedOrder",
+        [
+          {
+            ...orderAccountingForTips,
+            numerator,
+            denominator,
+            extraData: extraData ?? "0x",
+          },
+          criteria,
+          conduitKey,
+          recipientAddress,
+          payableOverrides,
+        ],
+        domain
+      )
+    : getTransactionMethods(
+        seaportContract.connect(signer),
+        "fulfillOrder",
+        [orderAccountingForTips, conduitKey, payableOverrides],
+        domain
+      );
+
   const exchangeAction = {
     type: "exchange",
-    transactionMethods: useAdvanced
-      ? getTransactionMethods(
-          seaportContract.connect(signer),
-          "fulfillAdvancedOrder",
-          [
-            {
-              ...orderAccountingForTips,
-              numerator,
-              denominator,
-              extraData: extraData ?? "0x",
-            },
-            hasCriteriaItems
-              ? generateCriteriaResolvers({
-                  orders: [order],
-                  offerCriterias: [offerCriteria],
-                  considerationCriterias: [considerationCriteria],
-                })
-              : [],
-            conduitKey,
-            recipientAddress,
-            payableOverrides,
-          ],
-          domain
-        )
-      : getTransactionMethods(
-          seaportContract.connect(signer),
-          "fulfillOrder",
-          [orderAccountingForTips, conduitKey, payableOverrides],
-          domain
-        ),
+    args,
+    transactionMethods,
   } as const;
 
   const actions = [...approvalActions, exchangeAction] as const;

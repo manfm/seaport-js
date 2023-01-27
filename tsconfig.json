@@ -9,7 +9,7 @@
     "noImplicitReturns": true,
     "noErrorTruncation": true,
     "noImplicitThis": false,
-    "noUnusedParameters": true,
+    // "noUnusedParameters": true,
     "preserveConstEnums": true,
     "removeComments": false,
     "sourceMap": true,
